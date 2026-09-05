@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
 module AgentDaemon
-  VERSION = "0.16.0"
+<<<<<<< HEAD
+  VERSION = "0.16.1"
+=======
+  VERSION = "0.15.1"
+>>>>>>> zumkorn/thread-root-message
 end

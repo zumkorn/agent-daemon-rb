@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+<<<<<<< HEAD
 ## [0.16.0] - 2026-09-05
 
 ### Added
@@ -13,6 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 - The `FALLBACK_AGENT=1` switch applies to every backend, not just `claude`. Whichever agent a runner normally uses is the one whose quota can run out. Runners without a `fallback_agent` are unaffected, and the switch remains process-wide by design — it exists for the case where one account's quota is exhausted and every runner has to move at once.
 - `codex.model` is validated at config load, like `claude.model` and unlike `opencode.model`, so a typo surfaces on startup rather than hours later on the first work item.
+=======
+## [0.15.1] - 2026-09-05
+
+### Fixed
+- Thread context now includes the message the thread hangs off. That message lives in the parent chat, not in the thread, so listing the thread returned every reply and not the question that started it — the one message that made the rest make sense. Found in use: an agent asked to follow up inside a thread it had opened saw only its own answer and reported the context as incomplete. A standalone thread reports no such message and is unaffected; a failed fetch warns and keeps the rest of the transcript.
+>>>>>>> zumkorn/thread-root-message
 
 ## [0.15.0] - 2026-09-05
 
