@@ -4,7 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.16.0] - 2026-09-05
+## [0.16.0] - 2026-09-06
+
+### Added
+- `github` trigger: a poller over the notification inbox that turns "@bot, take a look" on a pull request into an agent run. GitHub's notifications are already a queue — `GET /notifications?participating=true` plus `PATCH /notifications/threads/{id}` is read-plus-ack — so this needs no webhook and no public URL, the same shape as the `pachca` trigger. The agent posts the review itself with whatever CLI it has; the daemon decides when to wake it and who may ask.
+- Three gates, cheapest first: `reason` (default `mention`, `review_requested`), a `PullRequest` subject, and `trigger.repos`. Only then is the comment fetched — that costs a request — to check its author against `trigger.allowed_users`. A notification whose comment cannot be read is not acted on: without knowing who asked, the gate cannot be applied, and acting anyway would make the allowlist decorative.
+- The runner sets `expects_message_file?`, so the prompt asks the agent to write a one-line report after posting the review. Marking a notification read is a destructive ack, and a run that exits 0 having posted nothing would lose the request silently. The report doubles as a chat notification that a review landed.
+
+## [0.15.2] - 2026-09-06
+
+### Fixed
+- A run that exits 0 without writing anything is no longer treated as a success. Agent CLIs report success for plenty of runs that produced nothing: an unauthenticated `claude -p` prints "Not logged in" and exits 0, a sandbox that refused the write leaves the agent explaining it could not save the file, a `message_dir` that does not exist does the same. For `Runner::File` that meant archiving an unprocessed work item — bad, but visible. For `Runner::Pachca`, which acknowledges by deleting the event from Pachca's history, it meant the question was gone and nobody learned it went unanswered. Found in use, on a real question.
+- A runner that expects a reply now says so through `expects_message_file?` (default `false`), and a run leaving no new file in `message_dir` counts as a failure: attempt counted, work item kept, next cycle retries, exhaustion still reported through the usual `SYSTEM:<runner>` path. Opt-in because a runner whose agent is expected to act rather than write has no artefact to look for, and demanding one would turn working setups into failing ones.
 
 ### Added
 - `codex` backend: OpenAI's Codex CLI as a first-class option alongside `claude` and `opencode`, selected the same way (`backend: codex`, with an optional `codex.model` and `codex.extra_flags`). It runs `codex exec` with `--sandbox workspace-write` plus an `--add-dir` for every directory the runner writes to. That sandbox choice is deliberate and stated in the class: the agent's whole output is a message YAML written into `message_dir`, so under the safer-sounding read-only sandbox a run would finish successfully having written nothing — and a trigger that acknowledges on success would then discard the work item. Codex's `--dangerously-bypass-approvals-and-sandbox` is *not* the counterpart of Claude's `--dangerously-skip-permissions`: Claude has no sandbox to disable, so copying the flag across would not equalise behaviour but remove a protection. Operators who want it can pass it through `codex.extra_flags`.
