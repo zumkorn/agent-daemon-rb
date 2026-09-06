@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.15.3] - 2026-09-06
+
+### Fixed
+- The reply check no longer calls a run silent because it reused a filename. Prompts name the reply after the work item ("write your answer to `<event id>.yml`"), so a retry — or a second summons on the same pull request, which GitHub reports under the notification id it used before — writes a name already sitting in `sent/` from the previous run. Comparing names alone declared that run empty and retried an answer the person had already received. The snapshot now carries each name's mtime and a run counts when a name is new *or* has been written again. Found in use, on a review that had been posted to GitHub and delivered to the chat while the daemon reported it as having produced nothing.
+- Backend output comes back as UTF-8. `read_nonblock` hands back ASCII-8BIT, and appending a chunk carrying a single non-ASCII byte flipped the whole buffer to binary — so a `Result` stayed UTF-8 only as long as the agent spoke ASCII. Interpolating the binary one into a message raised `Encoding::CompatibilityError`, killing the runner thread at the exact moment it was trying to report a failure. Invalid sequences (a 4096-byte read can land mid-character) are scrubbed rather than raised over. Reaching this needed both a non-ASCII agent and a failure to report, which is why it surfaced only now: the reply check below is the first path that feeds agent prose into `create_error_message`.
+
 ## [0.15.2] - 2026-09-06
 
 ### Fixed
