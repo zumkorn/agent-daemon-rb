@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.17.0] - 2026-09-07
+
+### Added
+- `basecamp` trigger: a poller over the Basecamp notification inbox that turns "@agent, have a look" on a card, to-do or message into an agent run. Listing plus marking read is an explicit ack, the same shape as the `github` and `pachca` triggers, so this needs no webhook and no public URL — 37signals' own connector takes the other road and pays for it with a tunnel to the machine. Gates cheapest first: `type` in `trigger.kinds` (default `Mention`, because Basecamp's own product announcements arrive in the same inbox), `bucket_name` in `trigger.projects`, author in `trigger.allowed_users`.
+- Assignments were the obvious queue and are the wrong one: a to-do assigned to the agent has no ack short of completing or unassigning it, both of which change somebody's board, and an assignment records what to do but never who asked — so the allowlist every other trigger enforces would have had nothing to check.
+- The trigger reaches Basecamp through 37signals' `basecamp` CLI rather than over HTTP, the one place the triggers differ from each other. Basecamp is OAuth 2.1: no personal access token exists, an access token lives two weeks, and holding one means holding a refresh token and writing the rotated result back somewhere. This daemon owns no store, so an HTTP client would have had to invent one; the CLI refreshes on its own and the agent needs it installed anyway to answer, so the credential has exactly one keeper. No dependency comes with it — `Open3` and `JSON` are stdlib — but a binary must exist on the host, so `trigger` has no token key and a misconfigured host fails on the first poll rather than at config load.
+- `trigger.allowed_users` matches a numeric person id or a display name, never an email address: Basecamp masks those in API responses for everyone but the authenticated user, so a list of addresses would silently match nobody. Projects are matched by name because that is all a notification carries — the bucket id appears only inside its URLs, so a rename narrows the scope to nothing.
+
 ## [0.16.3] - 2026-09-06
 
 ### Fixed
