@@ -721,7 +721,55 @@ class TestRunnerPachca < Minitest::Test
     downloaded = runner.send(:attachments, event(id: "01A"))
 
     assert_equal 1, downloaded.size
-    assert_equal File.join(@message_dir, "attachments", "01A", "passwd"), downloaded.first["path"]
+    # Каталог по id сообщения: в треде их несколько, и имена файлов могут совпасть.
+    assert_equal File.join(@message_dir, "attachments", "555", "passwd"), downloaded.first["path"]
+  end
+
+  # Скриншот кидают, а спрашивают про него следующей репликой. Это более
+  # частая форма, чем файл при самом вопросе, и до этой правки старое вложение
+  # для агента не существовало вовсе — даже по имени.
+  def test_a_screenshot_posted_earlier_in_the_thread_is_seen
+    File.write(@template_path, "тред:\n{{thread_context}}\nвопрос: {{message}}")
+    client = StubPachcaClient.new([[thread_event]])
+    client.history = [{ "id" => 222, "user_id" => 42, "content" => "смотри",
+                        "files" => [image_file(name: "bug.png")] }]
+    client.root = { "id" => 555, "files" => [] }
+    runner = build_runner(client, trigger_overrides: { "chats" => nil })
+
+    runner.send(:iterate)
+
+    prompt = backend(runner).prompts.first
+    assert_match(/bug\.png:/, prompt, "старое вложение должно быть названо в транскрипте")
+    assert_equal 1, client.fetched_urls.size
+  end
+
+  # Сообщения треда приезжают вместе со своими files: за старое вложение платит
+  # только загрузка, но не лишний запрос к API.
+  def test_thread_attachments_cost_no_extra_api_call
+    client = StubPachcaClient.new([[thread_event]])
+    client.history = [{ "id" => 222, "user_id" => 42, "content" => "смотри",
+                        "files" => [image_file(name: "bug.png")] }]
+    client.root = { "id" => 555, "files" => [] }
+    runner = build_runner(client, trigger_overrides: { "chats" => nil })
+
+    runner.send(:iterate)
+
+    # Один GET — за корень треда, один — за само сообщение-вопрос.
+    assert_operator client.message_gets.size, :<=, 2
+  end
+
+  # Картинка стоит дорого там, где строка текста — нет. Что не поместилось,
+  # названо в транскрипте с путём.
+  def test_images_are_capped_and_the_question_own_files_win
+    client = StubPachcaClient.new([[event(id: "01A")]])
+    client.root = message_with_files(image_file(name: "a.png"), image_file(name: "b.png"),
+                                     image_file(name: "c.png"))
+    runner = build_runner(client, trigger_overrides: { "chats" => nil, "max_images" => 2 })
+
+    images = runner.send(:run_images, event(id: "01A"))
+
+    assert_equal 2, images.size
+    assert_match(/c\.png\z/, images.last)
   end
 
   def test_attachments_can_be_turned_off

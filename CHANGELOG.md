@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.19.1] - 2026-09-07
+
+### Fixed
+- Attachments on earlier thread messages are seen too. Only the triggering message's files were downloaded, so the ordinary shape — a screenshot, then "что тут не так?" a reply below it — left the agent with nothing to look at, and the transcript did not even name the file. Thread messages arrive from the context fetch already carrying their `files`, so this costs no extra API call: only the download.
+- Two caps, because a thread is not a message: `trigger.max_attachments` (10) bounds downloads per run, and `trigger.max_images` (4) bounds how many pictures reach the model — a picture is expensive in a way a line of text is not. What does not fit is still named in the transcript with its path, so the agent can say which one it needs. The question's own images are never displaced by older ones.
+- Downloads are filed by message id rather than event id, so two messages in one thread cannot collide over a filename.
+
 ## [0.19.0] - 2026-09-07
 
 ### Added
