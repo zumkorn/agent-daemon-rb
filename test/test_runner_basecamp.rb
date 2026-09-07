@@ -39,7 +39,7 @@ class BasecampStubBackend
     @written = 0
   end
 
-  def run(prompt)
+  def run(prompt, images: [])
     @prompts << prompt
     if @writes && @message_dir
       @written += 1

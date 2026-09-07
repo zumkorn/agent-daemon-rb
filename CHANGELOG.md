@@ -4,12 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.18.0] - 2026-09-07
+## [0.19.0] - 2026-09-07
 
 ### Added
 - The `pachca` transport attaches files. A reply YAML may carry `files:` — local paths, or a Hash with `path` plus an optional `name` (what the chat displays) and `file_type` (`image` renders inline, `file` attaches) — and the transport uploads each one before posting. The agent writes a path and nothing else: the three-step dance is the daemon's, not the prompt's.
 - Uploading is three requests, and the middle one is not Pachca's: `POST /uploads` returns presigned S3 form fields, the bytes go to the storage host directly (no bearer token there — the signature is the authorization) and the returned key is what the message references. The signed policy fixes the field set and their order, and the storage stops reading the form at the `file` part, so the multipart body is assembled by hand rather than through `Net::HTTP#set_form`, which promises no order. The body is binary throughout: a PNG does not survive a transcode.
 - The transfer happens at delivery rather than when the agent writes the file, because an upload is an orphan object on the storage until a message references its key — there is nothing to leak and nothing to clean up if the run fails before writing its YAML. A path that cannot be read raises, exactly like a half-written destination does: when the file *is* the answer, sending the text without it would look like a complete reply. `file_type` defaults from the extension because Pachca never infers it from the bytes — a screenshot sent as `file` arrives as a download link.
+
+## [0.18.0] - 2026-09-07
+
+### Added
+- The `pachca` trigger downloads a message's attachments and puts them in front of the agent: every file's local path in `{{files}}`, and images additionally on the backend's command line. A screenshot is now something the agent can look at rather than a fact it is told about.
+- `Backend#run` takes `images:` and `Backend::Codex` turns them into `--image`. Beside the prompt rather than inside it, because a picture cannot be described into one — an agent that opens a PNG through the shell reads bytes. Backends whose CLI has no such flag ignore the argument, and `Runner::Base#run_images` returns nothing by default, so no other trigger changes behaviour.
+- Attachments cost one `GET /messages/{id}` per acted-on item, because Pachca's event payload never carries them — its documentation says so outright ("по payload нельзя определить, есть ли у сообщения вложение"). Only items that passed the gates pay it, and message reads are rate-limited at ~10/s.
+- The daemon downloads rather than leaving it to the agent, for two reasons: the file must exist before the backend can name it on the command line, and an agent told to fetch a URL may simply not bother. Files land under `<message_dir>/attachments/<event id>/` — the one directory the sandbox is already given, and a subdirectory the Messenger's top-level `*.yml` glob ignores.
+- Failures never sink a run: an oversized file (`trigger.max_attachment_bytes`, 25 MB by default), a refusal from storage, or a missing message is logged and the answer goes on without it. `trigger.attachments: false` turns the whole thing off. Filenames come from whoever sent the message, so they decide the basename and nothing above it.
 
 ## [0.17.0] - 2026-09-07
 
