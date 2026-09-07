@@ -74,7 +74,7 @@ class StubPachcaClient
   attr_writer :history, :history_error, :root, :root_error, :download_failure
   attr_reader :message_queries, :message_gets, :fetched_urls
 
-  # Файл приезжает не из API, а по подписанной ссылке хранилища.
+  # The file comes from a presigned storage link, not from the API.
   def fetch_file(url, limit:)
     raise @download_failure if @download_failure
 
@@ -721,13 +721,13 @@ class TestRunnerPachca < Minitest::Test
     downloaded = runner.send(:attachments, event(id: "01A"))
 
     assert_equal 1, downloaded.size
-    # Каталог по id сообщения: в треде их несколько, и имена файлов могут совпасть.
+    # Filed by message id: a thread has several, and names can collide.
     assert_equal File.join(@message_dir, "attachments", "555", "passwd"), downloaded.first["path"]
   end
 
-  # Скриншот кидают, а спрашивают про него следующей репликой. Это более
-  # частая форма, чем файл при самом вопросе, и до этой правки старое вложение
-  # для агента не существовало вовсе — даже по имени.
+  # A screenshot goes up, the question about it comes a reply later. That is
+  # the common shape, and until this fix the older file did not exist for the
+  # agent at all — not even by name.
   def test_a_screenshot_posted_earlier_in_the_thread_is_seen
     File.write(@template_path, "тред:\n{{thread_context}}\nвопрос: {{message}}")
     client = StubPachcaClient.new([[thread_event]])
@@ -743,8 +743,8 @@ class TestRunnerPachca < Minitest::Test
     assert_equal 1, client.fetched_urls.size
   end
 
-  # Сообщения треда приезжают вместе со своими files: за старое вложение платит
-  # только загрузка, но не лишний запрос к API.
+  # Thread messages arrive carrying their own files: an older attachment costs
+  # the download and no extra API call.
   def test_thread_attachments_cost_no_extra_api_call
     client = StubPachcaClient.new([[thread_event]])
     client.history = [{ "id" => 222, "user_id" => 42, "content" => "смотри",
@@ -754,12 +754,12 @@ class TestRunnerPachca < Minitest::Test
 
     runner.send(:iterate)
 
-    # Один GET — за корень треда, один — за само сообщение-вопрос.
+    # One GET for the thread root, one for the question itself.
     assert_operator client.message_gets.size, :<=, 2
   end
 
-  # Картинка стоит дорого там, где строка текста — нет. Что не поместилось,
-  # названо в транскрипте с путём.
+  # A picture is expensive where a line of text is not. What does not fit is
+  # still named in the transcript, with its path.
   def test_images_are_capped_and_the_question_own_files_win
     client = StubPachcaClient.new([[event(id: "01A")]])
     client.root = message_with_files(image_file(name: "a.png"), image_file(name: "b.png"),
