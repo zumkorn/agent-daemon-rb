@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.19.2] - 2026-09-08
+
+### Fixed
+- Merging a pull request no longer starts a second review. A thread comes back unread on *any* activity — a merge, a push, a label, and the review this runner just posted — and GitHub then points `latest_comment_url` at the pull request itself rather than at a comment. Reading an author from that URL yields the PR's author, who is exactly the person likely to be on the allowlist, so the gate opened. Observed live: one pull request reviewed twice, and every merge re-arming the rest. A `mention` must now arrive as a comment; `review_requested` still needs none, since nobody types anything to ask for one.
+- A comment by the agent itself never summons it, checked before the allowlist rather than through it. With no allowlist every author passes, and a review the agent posts brings the thread back unread — so the runner would have answered itself for as long as it ran. Costs one `GET /user`, asked once.
+- A notification whose author cannot be read is no longer acted on even when no allowlist is set. It was already refused when one was; the guard above needs the author unconditionally, and acting without knowing who asked was the weaker half of the old rule.
+
 ## [0.19.1] - 2026-09-07
 
 ### Fixed
