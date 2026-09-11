@@ -81,7 +81,11 @@ module AgentDaemon
       # Logged at info with the agent's stated reason, because a wrong silence
       # is otherwise indistinguishable from a lost message.
       if message_data["skip"]
-        Log.info("[Messenger] Skipping #{task_key}: #{message_data["reason"] || "no reason given"}")
+        # Falls back to the filename: a skip file is written instead of a
+        # reply, and nothing obliges the agent to restate the work item in it.
+        # Without this the line reads "Skipping : ...", which names nothing.
+        Log.info("[Messenger] Skipping #{task_key || File.basename(file)}: " \
+                 "#{message_data["reason"] || "no reason given"}")
         move_to_sent(file)
         return
       end

@@ -90,6 +90,19 @@ class StubPachcaClient
     Array(@history)
   end
 
+  attr_writer :user_error
+
+  # The agent asks once who it is, to tell a message that names it from one it
+  # merely overhears.
+  def user(id)
+    raise @user_error if @user_error
+
+    (@user_gets ||= []) << id
+    { "first_name" => "Горыныч", "last_name" => nil, "nickname" => "gorynych_bot" }
+  end
+
+  attr_reader :user_gets
+
   def message(id)
     raise @root_error if @root_error
 
@@ -832,7 +845,7 @@ class TestRunnerPachca < Minitest::Test
   # until the answer lands; Pachca renders a live timer for a reaction named
   # agent-thinking, which is the native version of that acknowledgement.
   def test_the_indicator_goes_on_before_the_run_and_off_after_it
-    client = StubPachcaClient.new([[event(id: "01A")]])
+    client = StubPachcaClient.new([[event(id: "01A", content: "Горыныч, глянь")]])
     runner = build_runner(client)
 
     runner.send(:iterate)
@@ -841,11 +854,66 @@ class TestRunnerPachca < Minitest::Test
     assert_equal %w[agent-thinking agent-thinking], client.reactions.first.last(2)
   end
 
+  # A bot sees every message in the chats it belongs to. Reacting to each one
+  # puts it visibly in the middle of conversations nobody involved it in, and
+  # taking the reaction down afterwards does not unsee it. Found in use.
+  def test_no_indicator_on_a_message_that_does_not_name_the_agent
+    client = StubPachcaClient.new([[event(id: "01A", content: "а у тебя как?")]])
+    runner = build_runner(client)
+
+    runner.send(:iterate)
+
+    assert_empty client.reactions
+    assert_equal 1, backend(runner).prompts.size, "отвечать всё равно решает агент, не гейт"
+  end
+
+  def test_the_nickname_counts_as_naming_the_agent
+    client = StubPachcaClient.new([[event(id: "01A", content: "спроси @gorynych_bot")]])
+    runner = build_runner(client)
+
+    runner.send(:iterate)
+
+    assert_equal %i[add remove], client.reactions.map(&:first)
+  end
+
+  def test_the_gate_can_be_turned_off
+    client = StubPachcaClient.new([[event(id: "01A", content: "ни слова обо мне")]])
+    runner = build_runner(client, trigger_overrides: { "thinking_requires_mention" => false })
+
+    runner.send(:iterate)
+
+    assert_equal %i[add remove], client.reactions.map(&:first)
+  end
+
+  # A spinner where none was wanted is a smaller fault than a chat that looks
+  # ignored, so an unresolvable name falls back to always-on.
+  def test_an_unresolvable_name_shows_the_indicator_on_everything
+    client = StubPachcaClient.new([[event(id: "01A", content: "ни слова обо мне")]])
+    client.user_error = "boom"
+    runner = build_runner(client)
+
+    log = capture_log { runner.send(:iterate) }
+
+    assert_match(/could not resolve own name/, log)
+    assert_equal %i[add remove], client.reactions.map(&:first)
+  end
+
+  # Asked once, not once per message.
+  def test_the_name_is_resolved_once
+    events = [event(id: "01A", content: "Горыныч?")]
+    client = StubPachcaClient.new([events, [event(id: "01B", content: "Горыныч?")]])
+    runner = build_runner(client)
+
+    2.times { runner.send(:iterate) }
+
+    assert_equal 1, client.user_gets.size
+  end
+
   # Checked against the live API: colons around the name make Pachca resolve it
   # as a custom emoji id and answer 404, even though colons are exactly the form
   # it returns for stock shortcodes.
   def test_a_custom_reaction_is_named_bare_in_both_fields
-    client = StubPachcaClient.new([[event(id: "01A")]])
+    client = StubPachcaClient.new([[event(id: "01A", content: "Горыныч?")]])
     build_runner(client).send(:iterate)
 
     _, _, code, name = client.reactions.first
@@ -856,7 +924,7 @@ class TestRunnerPachca < Minitest::Test
   # A stock emoji is the glyph alone; the API fills the name in itself, and
   # sending one would be the same mistake in reverse.
   def test_a_stock_emoji_is_sent_as_the_glyph_without_a_name
-    client = StubPachcaClient.new([[event(id: "01A")]])
+    client = StubPachcaClient.new([[event(id: "01A", content: "Горыныч?")]])
     runner = build_runner(client, trigger_overrides: { "thinking_reaction" => "👀" })
 
     runner.send(:iterate)
@@ -867,7 +935,7 @@ class TestRunnerPachca < Minitest::Test
   end
 
   def test_the_indicator_is_attached_to_the_message_not_the_event
-    client = StubPachcaClient.new([[event(id: "01A", message_id: 555)]])
+    client = StubPachcaClient.new([[event(id: "01A", message_id: 555, content: "Горыныч?")]])
     build_runner(client).send(:iterate)
 
     assert_equal [555, 555], client.reactions.map { |r| r[1] }
@@ -876,7 +944,7 @@ class TestRunnerPachca < Minitest::Test
   # Below max_attempts the question is still being worked on, so the indicator
   # stays up across the retry rather than flickering.
   def test_a_retry_keeps_the_indicator_up_and_does_not_re_add_it
-    events = [event(id: "01A", message_id: 555)]
+    events = [event(id: "01A", message_id: 555, content: "Горыныч?")]
     client = StubPachcaClient.new([events, events])
     runner = build_runner(client, reasons: %i[failed ok])
 
@@ -888,7 +956,7 @@ class TestRunnerPachca < Minitest::Test
   # Shutdown rolled the attempt back, so the question is unanswered — but the
   # timer must not sit there over a process that is gone.
   def test_a_killed_run_takes_the_indicator_down
-    client = StubPachcaClient.new([[event(id: "01A", message_id: 555)]])
+    client = StubPachcaClient.new([[event(id: "01A", message_id: 555, content: "Горыныч?")]])
     runner = build_runner(client, reasons: [:killed])
 
     runner.send(:iterate)
@@ -900,8 +968,8 @@ class TestRunnerPachca < Minitest::Test
   # one warning is worth more than one per message forever — and the run must
   # not fail over a courtesy.
   def test_a_missing_reaction_disables_the_indicator_once_and_never_fails_a_run
-    events = [event(id: "01A", message_id: 555)]
-    client = StubPachcaClient.new([events, [event(id: "01B", message_id: 556)]])
+    events = [event(id: "01A", message_id: 555, content: "Горыныч?")]
+    client = StubPachcaClient.new([events, [event(id: "01B", message_id: 556, content: "Горыныч?")]])
     client.fail_reactions!
     runner = build_runner(client)
 
@@ -914,7 +982,7 @@ class TestRunnerPachca < Minitest::Test
   end
 
   def test_the_indicator_can_be_turned_off_in_config
-    client = StubPachcaClient.new([[event(id: "01A", message_id: 555)]])
+    client = StubPachcaClient.new([[event(id: "01A", message_id: 555, content: "Горыныч?")]])
     runner = build_runner(client, trigger_overrides: { "thinking_reaction" => nil })
 
     runner.send(:iterate)
