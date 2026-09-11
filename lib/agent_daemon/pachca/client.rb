@@ -159,6 +159,13 @@ module AgentDaemon
       # One message by id. Used for the message a thread hangs off: that one
       # lives in the parent chat, not in the thread, so listing the thread
       # returns everything except the question that started it.
+      # A person or a bot. Used to learn the agent's own names, so it can tell
+      # a message that addresses it from one it merely overhears.
+      def user(id)
+        body = get("/users/#{Integer(id)}")
+        body["data"] || body
+      end
+
       def message(id)
         body = get("/messages/#{Integer(id)}")
         body["data"] || body

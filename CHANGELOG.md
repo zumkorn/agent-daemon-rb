@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.20.1] - 2026-09-11
+
+### Fixed
+- The `pachca` thinking indicator appears only when the message names the agent. A bot sees every message in the chats it belongs to, so reacting to each one put it visibly in the middle of conversations nobody involved it in — and taking the reaction down afterwards does not unsee it. Found in use. An implicit question is still answered, it just gets no spinner first, which is the cheaper mistake; `trigger.thinking_requires_mention: false` restores the old behaviour.
+- The names come from one `GET /users/{bot_user_id}`, asked once and cached — a Pachca mention is plain text in the body, with no markup to key on. If that request fails the indicator falls back to always-on rather than never-on: a spinner where none was wanted is a smaller fault than a chat that looks ignored.
+- Six attachment tests were defined twice in `test_runner_pachca.rb`, left over from the #12 rebase. Ruby redefines silently, so the later copy won and the suite stayed green while the earlier six never ran — and one of them carried a stale expectation that would have failed. Removed.
+
 ## [0.20.0] - 2026-09-08
 
 ### Added
