@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "stringio"
 require "tmpdir"
 require "yaml"
 
@@ -151,6 +152,21 @@ class TestMessenger < Minitest::Test
 
     assert_equal %w[loud], transport.messages.map { |m| m["task_key"] }
     assert_equal %w[loud.yml quiet.yml], Dir.children(File.join(@message_dir, "sent")).sort
+  end
+
+  # The point of logging a silence is being able to check it later, and nothing
+  # obliges the agent to restate the work item in a file that carries no reply.
+  def test_a_skip_without_a_task_key_is_logged_by_filename
+    File.write(File.join(@message_dir, "01ABC.yml"),
+               { "skip" => true, "reason" => "nobody addressed me" }.to_yaml)
+
+    config = ConfigStub.new(mattermost_config, @message_dir)
+    messenger = AgentDaemon::Messenger.new(config, ShutdownStub.new)
+    messenger.instance_variable_set(:@transport, TransportStub.new)
+
+    log = capture_log { messenger.send(:iterate) }
+
+    assert_match(/Skipping 01ABC\.yml: nobody addressed me/, log)
   end
 
   def test_routes_system_alert_to_configured_user_as_separate_post
