@@ -79,6 +79,9 @@ module AgentDaemon
         @context_messages  = trigger.fetch("context_messages", DEFAULT_CONTEXT_MESSAGES).to_i
         @thinking_reaction = trigger.fetch("thinking_reaction", DEFAULT_THINKING_REACTION)
         @thinking          = Set.new
+        # On by default: a bot in a group chat that reacts to every message is
+        # in the way. Set it to false to get the indicator back on everything.
+        @thinking_requires_mention = trigger.fetch("thinking_requires_mention", true)
         @download_attachments  = trigger.fetch("attachments", true)
         @max_attachment_bytes  = trigger.fetch("max_attachment_bytes", DEFAULT_MAX_ATTACHMENT_BYTES).to_i
         # Memoised per event: the summary is built for the prompt and the image
@@ -239,8 +242,47 @@ module AgentDaemon
       # Tell the chat the question was heard, before the agent spends minutes
       # on it. Fires once per attempt; a retry finds the reaction already there
       # and does nothing.
+      # The indicator says "I heard you, working on it" — welcome when somebody
+      # asked, noise when they did not. A bot sees every message in the chats it
+      # belongs to, so reacting to each one puts the agent visibly in the middle
+      # of conversations nobody involved it in, and removing the reaction
+      # afterwards does not unsee it.
+      #
+      # So it appears only when the message names the agent. An implicit
+      # question ("а сколько у нас пользователей?") is still answered — it just
+      # gets no spinner first, which is the cheaper mistake.
       def before_attempt(event)
+        return unless !@thinking_requires_mention || addressed?(event)
+
         start_thinking(event)
+      end
+
+      # By name, because that is what a Pachca mention is in the message body:
+      # plain text, no markup to key on.
+      #
+      # The names are asked for once and cached. If that request fails the
+      # indicator falls back to always-on rather than never-on: a spinner where
+      # none was wanted is a smaller fault than a chat that looks ignored.
+      def addressed?(event)
+        names = bot_names
+        return true if names.empty?
+
+        content = event.dig("payload", "content").to_s.downcase
+        names.any? { |name| content.include?(name) }
+      end
+
+      def bot_names
+        return @bot_names if defined?(@bot_names)
+
+        user = @client.user(@bot_user_id)
+        @bot_names = [user["first_name"], user["last_name"], user["nickname"]]
+                     .filter_map { |name| name.to_s.strip.downcase }
+                     .reject(&:empty?)
+        Log.info("[#{log_tag}] thinking indicator shows when named: #{@bot_names.join(", ")}")
+        @bot_names
+      rescue => e
+        Log.warn("[#{log_tag}] could not resolve own name (#{e.message}); showing the indicator on every message")
+        @bot_names = []
       end
 
       def after_success(event)
